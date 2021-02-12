@@ -1,13 +1,24 @@
 'use strict';
-const env = require('dotenv').config();
-const express = require('express');
-const axios = require('axios');
-const FormData = require('form-data');
-const snoowrap = require('snoowrap');
+import dotenv from 'dotenv'
+import express  from'express';
+import axios from 'axios';
+import snoowrap from 'snoowrap';
+import sqlite3 from 'sqlite3'
+import { open } from 'sqlite'
 
+const env = dotenv.config()
 const app = express();
-const port = 3000;
-const redirect = 'http://127.0.0.1:3000/callback'
+const port = 5001;
+const redirect = 'http://127.0.0.1:5000/api/callback';
+let db;
+(async () => {
+    // open the database
+    db = await open({
+        filename: './rw.db',
+        driver: sqlite3.Database
+    })
+})()
+
 
 let r = {};
 // TODO: move this to browser storage
@@ -20,26 +31,32 @@ let tokenInfo = {
 }
 
 
-app.get('/', index)
-app.get('/auth',auth);
-app.get('/callback',callback);
+app.get('/api/', index)
+app.get('/api/auth',auth);
+app.get('/api/callback',callback);
 
 
 async function index(req, res) {
+    const user = tokenDecode(req.header('user'));
+    const sql = `SELECT token FROM auth where user = '${user}'`
 
-    if(tokenInfo.refreshToken !== '') {
-        await getSnoo();
-        let response = "<ul>"
-        r.getHot('all',{limit:10}).map(post => post.title).then((data) => {
-            data.forEach((item) => {
-                response += `<li>${item.title}</li>`;
-            })
-            res.send(response);
-        });
-        res.send("authenticated");
-    } else {
-        res.send('<a href="/auth">Login</a>')
-    }
+    const token = await db.get(sql);
+    console.log("UserInfo:",user,sql,token);
+
+    // if(tokenInfo.refreshToken !== '') {
+    //     await getSnoo();
+    //     let response = "<ul>"
+    //     r.getHot('all',{limit:10}).map(post => post.title).then((data) => {
+    //         data.forEach((item) => {
+    //             response += `<li>${item.title}</li>`;
+    //         })
+    //         res.send(response);
+    //     });
+    //     res.send("authenticated");
+    // } else {
+    //     res.send({'message':'up'})
+    // }
+    res.send(token);
 }
 
 async function auth(req,res) {
@@ -78,31 +95,67 @@ async function callback(req,res) {
 
             tokenInfo = response.data.response;
 
-            r = new snoowrap({
-                userAgent: 'redditwatch - https://www.zoms.net/reddit-watch',
-                clientId: env.parsed.cliendid,
-                clientSecret: env.parsed.clientsecret,
-                refreshToken: tokenInfo.refresh_token,
-            });
-            res.redirect("/")
+
+            const snoo = getSnoo(tokenInfo.refresh_token)
+            const me = snoo.getMe();
+
+            const userSql = `SELECT id FROM auth where user = '${user}'`
+            const id = await db.get(userSql);
+            let sql = `update auth set token = ${tokenInfo.refresh_token} where id = ${me.name}`;
+            if(!id) {
+                sql = `insert into auth name,token values ('${me.token}','${tokenInfo.refresh_token}')`;
+            }
+            db.run(sql);
+            res.send('');
         } catch(e) {
             console.log('err', e.message);
+            res.send({err:e.message});
         }
 
     }
 
 }
 
-async function getSnoo(tokenInfo) {
-    console.log(tokenInfo);
-   r =  new snoowrap({
+async function getSnoo(token) {
+   return new snoowrap({
         userAgent: 'redditwatch - https://www.zoms.net/reddit-watch',
         clientId: env.parsed.cliendid,
         clientSecret: env.parsed.clientsecret,
-        refreshToken: tokenInfo.refresh_token
+        refreshToken: token
     });
 }
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
     console.log(`Example app listening at http://localhost:${port}`)
 })
+
+process.on('SIGTERM', () => {
+    console.info('SIGTERM signal received.');
+    console.log('Closing http server.');
+    server.close(() => {
+        console.log('Http server closed.');
+        // boolean means [force], see in mongoose doc
+        db.close(false, () => {
+            console.log('MongoDb connection closed.');
+        });
+    });
+});
+
+async function query(sql) {
+    try {
+        const data = await db.get(sql);
+        return data;
+    } catch (e) {
+        throw e.message;
+    }
+}
+
+function tokenDecode(token) {
+    let bufferObj = Buffer.from(token, "base64");
+    return bufferObj.toString("utf-8");
+}
+function tokenEncode(token) {
+    let bufferObj = Buffer.from(token, "utf8");
+    return bufferObj.toString("base64");
+
+}

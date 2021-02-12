@@ -21,21 +21,15 @@ let db;
 
 
 let r = {};
-// TODO: move this to browser storage
-let tokenInfo = {
-    access_token: '',
-    token_type: 'bearer',
-    expires_in: 3600,
-    refresh_token: '',
-    scope: 'identity read save vote'
-}
+
+
 
 
 app.get('/api/', index)
 app.get('/api/auth',auth);
 app.get('/api/callback',callback);
 
-
+console.log(env)
 async function index(req, res) {
     const user = tokenDecode(req.header('user'));
     const sql = `SELECT token FROM auth where user = '${user}'`
@@ -93,7 +87,7 @@ async function callback(req,res) {
                     }
                 });
 
-            tokenInfo = response.data.response;
+            const tokenInfo = response.data.response;
 
 
             const snoo = getSnoo(tokenInfo.refresh_token)

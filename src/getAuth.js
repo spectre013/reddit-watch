@@ -3,15 +3,36 @@ const env = require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const FormData = require('form-data');
+const snoowrap = require('snoowrap');
 
 const app = express();
 const port = 3000;
 const redirect = 'http://127.0.0.1:3000/callback'
 
-app.get('/', (req, res) => {
-    res.send('<a href="/auth">Auth</a>')
-})
+const r = new snoowrap({
+    userAgent: 'redditwatch - https://www.zoms.net/reddit-watch',
+    clientId: env.parsed.cliendid,
+    clientSecret: env.parsed.clientsecret,
+    accessToken:''
+});
+// TODO: move this to browser storage
+let tokenInfo = {}
 
+
+app.get('/', (req, res) => {
+
+    if(tokenInfo.accessToken) {
+        let response = "<ul>"
+        r.getHot('all',{limit:10}).map(post => post.title).then((data) => {
+            data.forEach((item) => {
+                response += `<li>{{ item.title }}</li>`;
+            })
+           res.send(response);
+        });
+    } else {
+        res.send('<a href="/auth">Login</a>')
+    }
+})
 
 
 app.get('/auth',(req,res) => {
@@ -46,7 +67,9 @@ app.get('/callback',async (req,res) => {
                         'User-Agent': 'redditwatch - https://www.zoms.net/reddit-watch'
                     }
         }).then((r) => {
+            tokenInfo = r.data;
             console.log('response', r.data)
+
         }).catch((e) => {
             console.log('err', e.data)
         });

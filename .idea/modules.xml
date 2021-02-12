@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/reddit.iml" filepath="$PROJECT_DIR$/reddit.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../reddit-watch-ui/reddit-watch-ui.iml" filepath="$PROJECT_DIR$/../reddit-watch-ui/reddit-watch-ui.iml" />
     </modules>
   </component>
 </project>

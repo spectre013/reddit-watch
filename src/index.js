@@ -1,11 +1,108 @@
 'use strict';
+const env = require('dotenv').config();
+const express = require('express');
+const axios = require('axios');
+const FormData = require('form-data');
 const snoowrap = require('snoowrap');
-const env = require('dotenv').config()
-const r = new snoowrap({
-    userAgent: 'redditwatch - https://www.zoms.net/reddit-watch',
-    clientId: env.parsed.cliendid,
-    clientSecret: env.parsed.clientsecret,
-    accessToken:env.parsed.accessToken
-});
 
-r.getHot().map(post => post.title).then(console.log);
+const app = express();
+const port = 3000;
+const redirect = 'http://127.0.0.1:3000/callback'
+
+let r = {};
+// TODO: move this to browser storage
+let tokenInfo = {
+    access_token: '',
+    token_type: 'bearer',
+    expires_in: 3600,
+    refresh_token: '',
+    scope: 'identity read save vote'
+}
+
+
+app.get('/', index)
+app.get('/auth',auth);
+app.get('/callback',callback);
+
+
+async function index(req, res) {
+
+    if(tokenInfo.refreshToken !== '') {
+        await getSnoo();
+        let response = "<ul>"
+        r.getHot('all',{limit:10}).map(post => post.title).then((data) => {
+            data.forEach((item) => {
+                response += `<li>${item.title}</li>`;
+            })
+            res.send(response);
+        });
+        res.send("authenticated");
+    } else {
+        res.send('<a href="/auth">Login</a>')
+    }
+}
+
+async function auth(req,res) {
+        const callback = encodeURI(redirect);
+        const url = `https://www.reddit.com/api/v1/authorize?client_id=${env.parsed.clientid}&response_type=code&state=${env.parsed.state}&redirect_uri=${callback}&duration=permanent&scope=identity,read,save,vote`;
+        console.log("Redirecting to ", url);
+        res.redirect(url);
+}
+
+async function callback(req,res) {
+    const state = req.query.state;
+    const code = req.query.code;
+
+    if(state === 'spaceman-spiff') {
+        const session_url = 'https://www.reddit.com/api/v1/access_token';
+        const username = env.parsed.clientid;
+        const password = env.parsed.clientsecret;
+        const data = Buffer.from(username + ':' + password,'utf-8');
+        const basicAuth = 'Basic ' + data.toString("base64");
+        let params = new URLSearchParams()
+        params.append('grant_type','authorization_code')
+        params.append('code',code)
+        params.append('redirect_uri',redirect)
+
+
+        console.log("params:",basicAuth,params)
+        try {
+            const response = await axios.post(session_url, params,
+                {
+                    headers: {
+                        'Authorization': 'Basic ' + data.toString("base64"),
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'User-Agent': 'redditwatch - https://www.zoms.net/reddit-watch'
+                    }
+                });
+
+            tokenInfo = response.data.response;
+
+            r = new snoowrap({
+                userAgent: 'redditwatch - https://www.zoms.net/reddit-watch',
+                clientId: env.parsed.cliendid,
+                clientSecret: env.parsed.clientsecret,
+                refreshToken: tokenInfo.refresh_token,
+            });
+            res.redirect("/")
+        } catch(e) {
+            console.log('err', e.message);
+        }
+
+    }
+
+}
+
+async function getSnoo(tokenInfo) {
+    console.log(tokenInfo);
+   r =  new snoowrap({
+        userAgent: 'redditwatch - https://www.zoms.net/reddit-watch',
+        clientId: env.parsed.cliendid,
+        clientSecret: env.parsed.clientsecret,
+        refreshToken: tokenInfo.refresh_token
+    });
+}
+
+app.listen(port, () => {
+    console.log(`Example app listening at http://localhost:${port}`)
+})

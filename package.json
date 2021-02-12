@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "run": "node src/index.js",
+    "serve": "nodemon src/index.js",
     "auth": "node src/getAuth.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -15,6 +15,7 @@
     "dotenv": "^8.2.0",
     "express": "^4.17.1",
     "form-data": "^3.0.0",
+    "nodemon": "^2.0.7",
     "snoowrap": "^1.22.0"
   }
 }
